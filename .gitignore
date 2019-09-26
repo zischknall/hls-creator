@@ -1,1 +1,4 @@
-output
+*
+!hls-creator.sh
+!LICENSE
+!README.md
