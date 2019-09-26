@@ -1,56 +1,76 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# ffmpeg -y -re -i bunny.mp4 -keyint_min 96 -x264opts "keyint=96:min-keyint=96:no-scenecut" -g 96 -r:v 24 -s 320x180 -b:v 256k -c:v libx264 -pix_fmt yuv420p -profile:v baseline -level 3.0 -c:a aac -ac 1 -ar 48000 -b:a 96k -hls_time 4 -hls_playlist_type vod -hls_segment_filename bunny/180p%03d.ts bunny/180p.m3u8
+set -e
 
-file=$1
-IFS='.' read -ra fileNameArr <<< $file
-baseName=${fileNameArr[0]}
-keyBaseURI=$2
-if [ -z $keyBaseURI -o -z ${fileNameArr[1]} ]
-then
-    echo 'Usage: hls-creator.sh [input file] [key URI]'
-    exit 1
+# Usage create-vod-hls.sh SOURCE_FILE [OUTPUT_NAME]
+[[ ! "${1}" ]] && echo "Usage: create-vod-hls.sh SOURCE_FILE [OUTPUT_NAME]" && exit 1
+
+# comment/add lines here to control which renditions would be created
+renditions=(
+# resolution  bitrate  audio-rate
+  "426x240    400k    128k"
+#  "640x360    800k     128k"
+#  "842x480    1400k    128k"
+#  "1280x720   2800k    128k"
+#  "1920x1080  5000k    192k"
+)
+
+#########################################################################
+
+source="${1}"
+target="${2}"
+keyURI="${3}"
+if [[ ! "${target}" ]]; then
+  target="${source##*/}" # leave only last component of path
+  target="${target%.*}"  # strip extension
 fi
+mkdir -p ${target}
 
-mkdir -p $PWD/output/$baseName
-
+# key generation
 echo 'Generating encryption key'
-openssl rand 16 > $PWD/output/$baseName.key
+openssl rand 16 > ${target}.key
 keyIV=$(openssl rand -hex 16)
-cat > $PWD/output/$baseName.keyinfo <<EOF
-$keyBaseURI/$baseName.key
-$baseName.key
-$keyIV
-EOF
-echo 'Please upload '$baseName'.key to '$keyBaseURI' and press ENTER'
-read -n 1 -s
+keyinfo="${keyURI}/${target}.key
+${target}.key
+$keyIV"
+echo -e "${keyinfo}" > ${target}.keyinfo
 
-echo 'Transcoding the input file'
-ffmpeg -hide_banner -y -i $2 \
-    -vf scale=w=426:h=240:force_original_aspect_ratio=decrease -c:a aac -ar 48000 -c:v h264 -profile:v main -crf 20 -sc_threshold 0 -r 144 -g 144 -keyint_min 24 -hls_time 6 -hls_playlist_type vod -hls_key_info_file $PWD/output/$baseName.keyinfo -b:v 500k -maxrate 500k -bufsize 300k -b:a 128k -hls_segment_filename $PWD/output/$baseName/240p_%03d.ts $PWD/output/$baseName/240p.m3u8 \
-    -vf scale=w=640:h=360:force_original_aspect_ratio=decrease -c:a aac -ar 48000 -c:v h264 -profile:v main -crf 20 -sc_threshold 0 -r 144 -g 144 -keyint_min 24 -hls_time 6 -hls_playlist_type vod -hls_key_info_file $PWD/output/$baseName.keyinfo -b:v 1000k -maxrate 1000k -bufsize 600k -b:a 128k -hls_segment_filename $PWD/output/$baseName/360p_%03d.ts $PWD/output/$baseName/360p.m3u8 \
-    -vf scale=w=842:h=480:force_original_aspect_ratio=decrease -c:a aac -ar 48000 -c:v h264 -profile:v main -crf 20 -sc_threshold 0 -r 144 -g 144 -keyint_min 24 -hls_time 6 -hls_playlist_type vod -hls_key_info_file $PWD/output/$baseName.keyinfo -b:v 1500k -maxrate 1500k -bufsize 1000k -b:a 128k -hls_segment_filename $PWD/output/$baseName/480p_%03d.ts $PWD/output/$baseName/480p.m3u8 \
-    -vf scale=w=1280:h=720:force_original_aspect_ratio=decrease -c:a aac -ar 48000 -c:v h264 -profile:v main -crf 20 -sc_threshold 0 -r 144 -g 144 -keyint_min 24 -hls_time 6 -hls_playlist_type vod -hls_key_info_file $PWD/output/$baseName.keyinfo -b:v 2500k -maxrate 2500k -bufsize 1500k -b:a 128k -hls_segment_filename $PWD/output/$baseName/720pL_%03d.ts $PWD/output/$baseName/720pL.m3u8 \
-    -vf scale=w=1280:h=720:force_original_aspect_ratio=decrease -c:a aac -ar 48000 -c:v h264 -profile:v main -crf 20 -sc_threshold 0 -r 144 -g 144 -keyint_min 24 -hls_time 6 -hls_playlist_type vod -hls_key_info_file $PWD/output/$baseName.keyinfo -b:v 3500k -maxrate 3500k -bufsize 2000k -b:a 128k -hls_segment_filename $PWD/output/$baseName/720pH_%03d.ts $PWD/output/$baseName/720pH.m3u8 \
-    -vf scale=w=1920:h=1080:force_original_aspect_ratio=decrease -c:a aac -ar 48000 -c:v h264 -profile:v main -crf 20 -sc_threshold 0 -r 144 -g 144 -keyint_min 24 -hls_time 6 -hls_playlist_type vod -hls_key_info_file $PWD/output/$baseName.keyinfo -b:v 4500k -maxrate 4500k -bufsize 2250k -b:a 128k -hls_segment_filename $PWD/output/$baseName/1080pL_%03d.ts $PWD/output/$baseName/1080pL.m3u8 \
-    -vf scale=w=1920:h=1080:force_original_aspect_ratio=decrease -c:a aac -ar 48000 -c:v h264 -profile:v main -crf 20 -sc_threshold 0 -r 144 -g 144 -keyint_min 24 -hls_time 6 -hls_playlist_type vod -hls_key_info_file $PWD/output/$baseName.keyinfo -b:v 6000k -maxrate 6000k -bufsize 3000k -b:a 128k -hls_segment_filename $PWD/output/$baseName/1080pH_%03d.ts $PWD/output/$baseName/1080pH.m3u8
+# static parameters
+static_params="-keyint_min 96 -x264opts keyint=96:min-keyint=96:no-scenecut -g 96 -r:v 24 -c:v libx264 -pix_fmt yuv420p -profile:v baseline -level 3.0 -c:a aac -ac 1 -ar 48000 -b:a 96k -hls_time 4 -hls_playlist_type vod -hls_key_info_file ${target}.keyinfo"
 
-rm $PWD/output/$baseName.keyinfo 
+# misc params
+misc_params="-hide_banner -y"
 
-echo 'Creating master playlist file'
-cat > $PWD/output/$baseName.m3u8 <<EOF
-#EXTM3U
+master_playlist="#EXTM3U
 #EXT-X-VERSION:3
-#EXT-X-STREAM-INF:BANDWIDTH=500000,RESOLUTION=426x240
-$baseName/240p.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=640x360
-$baseName/360p.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=1500000,RESOLUTION=842x480
-$baseName/480p.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x720
-$baseName/720pL.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=3500000,RESOLUTION=1280x720
-$baseName/720pH.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=4500000,RESOLUTION=1920x1080
-$baseName/1080pL.m3u8
-#EXT-X-STREAM-INF:BANDWIDTH=6000000,RESOLUTION=1920x1080
-$baseName/1080pH.m3u8
-EOF
+"
+for rendition in "${renditions[@]}"; do
+  # drop extraneous spaces
+  rendition="${rendition/[[:space:]]+/ }"
+
+  # rendition fields
+  resolution="$(echo ${rendition} | cut -d ' ' -f 1)"
+  bitrate="$(echo ${rendition} | cut -d ' ' -f 2)"
+  audiorate="$(echo ${rendition} | cut -d ' ' -f 3)"
+
+  # calculated field
+  height="$(echo ${resolution} | cut -d 'x' -f 2)"
+  name="${height}p"
+  bandwidth=$(echo ${bitrate} | cut -d 'k' -f 1)
+  bandwidth=$((${bandwidth}*1000))
+  
+  cmd=" ${static_params} -s ${resolution} -b:v ${bitrate} -b:a ${audiorate}" 
+  cmd+=" -hls_segment_filename ${target}/${name}_%03d.ts ${target}/${name}.m3u8"
+  
+  # add rendition entry in the master playlist
+  master_playlist+="#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${resolution}\n${name}.m3u8\n"
+
+  echo -e "Converting "
+  ffmpeg ${misc_params} -i ${source} ${cmd}
+
+done
+
+# create master playlist file
+echo -e "${master_playlist}" > ${target}/playlist.m3u8
+
+echo "Done - encoded HLS is at ${target}/"
